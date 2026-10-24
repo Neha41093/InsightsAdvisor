@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Business Insights Advisor</title>
+    <meta
+      name="description"
+      content="Analyze data and gain useful insights."
+    />
+    <meta property="og:title" content="Business Insights Advisor" />
+    <meta
+      property="og:description"
+      content="Analyze data and gain useful insights."
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+            },
+            colors: {
+              brand: {
+                50: '#f0f7ff',
+                100: '#e0effe',
+                200: '#bae0fd',
+                300: '#7cc7fb',
+                400: '#36abf7',
+                500: '#0c8fe9',
+                600: '#0271c7',
+                700: '#035ba1',
+                800: '#074d85',
+                900: '#0c416e',
+                950: '#082949',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="/index.css">
+  </head>
+  <body class="bg-[#f8fafc] text-slate-800 antialiased selection:bg-brand-500/20 selection:text-brand-900">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

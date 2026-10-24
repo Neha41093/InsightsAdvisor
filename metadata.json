@@ -1,0 +1,9 @@
+{
+  "name": "Business Insights Advisor",
+  "description": "Analyze data and gain useful insights.",
+  "requestFramePermissions": [],
+  "prompt": "",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
