@@ -331,7 +331,7 @@ ${question}${depthDirective}`;
   }
 
   app.listen(port, '0.0.0.0', () => {
-    console.log(`Business Insights Advisor running on http://0.0.0.0:${port}`);
+    console.log(`Iris: Insights Advisor running on http://0.0.0.0:${port}`);
   });
 }
 

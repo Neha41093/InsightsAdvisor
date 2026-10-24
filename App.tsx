@@ -451,7 +451,7 @@ ${instantStats.executiveSummary}${metricsText}${questionsText}
             </div>
             <div>
               <h1 className="text-base sm:text-lg font-bold text-white tracking-tight leading-none">
-                Business Insights Advisor
+                Iris: Insights Advisor
               </h1>
               <p className="text-xs text-slate-300/80 mt-1 font-normal">
                 Analyze data and gain useful insights
