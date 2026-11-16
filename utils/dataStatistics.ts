@@ -259,7 +259,52 @@ export function computeInstantStatistics(dataFile: UniversalDataFile): FileAnaly
     };
   }
 
-  // 4. Unstructured Text / Documents / Transcripts
+  // 4. PDF Documents
+  if (dataFile.format === 'pdf') {
+    const words = dataFile.wordCount;
+    const lines = dataFile.lineCount;
+    const readTimeMin = Math.max(1, Math.ceil(words / 200));
+    const pageMatches = dataFile.rawText.match(/^--- Page \d+ of (\d+) ---$/m);
+    const pageCount = pageMatches ? Number(pageMatches[1]) : Math.max(1, (dataFile.rawText.match(/^--- Page \d+/gm) || []).length);
+
+    const metrics: DataMetric[] = [
+      { label: 'Page Count', value: pageCount.toLocaleString(), note: `${lines.toLocaleString()} extracted lines`, category: 'PDF' },
+      { label: 'Word Count', value: words.toLocaleString(), note: `~${readTimeMin} min read time`, category: 'Text' },
+      { label: 'Payload Size', value: `${(dataFile.size / 1024).toFixed(1)} KB`, note: `${dataFile.charCount.toLocaleString()} characters`, category: 'Size' },
+    ];
+
+    const questionCategories: QuestionCategory[] = [
+      {
+        category: 'Executive Synthesis & Takeaways',
+        questions: [
+          'Summarize the key findings and conclusions across all pages of this PDF',
+          'Extract all notable financial numbers, metrics, dates, and percentages mentioned',
+          'What are the primary recurring themes, decisions, or recommendations?',
+        ],
+      },
+      {
+        category: 'Risks & Action Items',
+        questions: [
+          'What critical risks, bottlenecks, or compliance points are highlighted?',
+          'List all action items, owners, and deadlines referenced in the document',
+        ],
+      },
+    ];
+
+    return {
+      domain: 'PDF Document',
+      executiveSummary: `Extracted PDF document spanning ${pageCount} ${pageCount === 1 ? 'page' : 'pages'} (${words.toLocaleString()} words across ${lines.toLocaleString()} lines). Ready for full-document cross-page synthesis, metric extraction, and Q&A.`,
+      metrics,
+      dataHealth: {
+        records: `${pageCount} ${pageCount === 1 ? 'page' : 'pages'} (${words.toLocaleString()} words)`,
+        density: 'Structured PDF text',
+        quality: 'Text layer extracted cleanly',
+      },
+      questionCategories,
+    };
+  }
+
+  // 5. Unstructured Text / Documents / Transcripts
   const words = dataFile.wordCount;
   const lines = dataFile.lineCount;
   const readTimeMin = Math.max(1, Math.ceil(words / 200));

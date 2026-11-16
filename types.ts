@@ -7,6 +7,7 @@ export type DataFormat =
   | 'log'
   | 'code'
   | 'markdown'
+  | 'pdf'
   | 'unstructured_text';
 
 export interface TabularData {

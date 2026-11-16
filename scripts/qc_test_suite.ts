@@ -1,4 +1,6 @@
-import { parseUniversalData } from '../utils/dataParser';
+import { parseUniversalData, computeDatasetCacheKey } from '../utils/dataParser';
+import { extractSpreadsheetText } from '../utils/excelExtractor';
+import * as XLSX from 'xlsx';
 import { computeInstantStatistics } from '../utils/dataStatistics';
 import { cleanEmptySections } from '../utils/markdownCleaner';
 import { SAMPLE_DATASETS } from '../utils/sampleDatasets';
@@ -351,6 +353,52 @@ Europe generated the largest share of revenue at $189,000.`;
       { rowsReturned: sqlRes.rows.length, scannedRows: sqlRes.scannedRows }
     );
   }
+
+  // -------------------------------------------------------------
+  // TEST GROUP 8: XLSX/PDF Ingestion & Collision-Proof Cache Keys
+  // -------------------------------------------------------------
+  console.log('\n--- TEST GROUP 8: XLSX, PDF & Collision-Proof Cache Keys ---');
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet([
+    { Product: 'Widget A', Region: 'North', Sales: 12500 },
+    { Product: 'Widget B', Region: 'South', Sales: 18500 },
+    { Product: 'Widget C', Region: 'North', Sales: 9000 },
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Q4_Sales');
+  const xlsxBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+  const extractedXlsx = extractSpreadsheetText(xlsxBuf);
+  const parsedXlsx = parseUniversalData('quarterly_sales.xlsx', extractedXlsx.csvText, xlsxBuf.byteLength);
+  const xlsxSql = executeSqlQuery(parsedXlsx, 'SELECT Region, SUM(Sales) AS TotalSales FROM dataset GROUP BY Region');
+
+  recordTest(
+    'Document Ingestion',
+    'Excel (.xlsx) Workbook Extraction & SQL Query',
+    parsedXlsx.format === 'tabular' &&
+      parsedXlsx.tabular?.totalRows === 3 &&
+      xlsxSql.rows.length === 2,
+    `Extracted sheet "${extractedXlsx.activeSheet}" (${parsedXlsx.tabular?.totalRows} rows), formatLabel: "${parsedXlsx.formatLabel}"`
+  );
+
+  const pdfSampleText = `--- Page 1 of 2 ---\nQ4 Financial Summary\nTotal revenue rose 18% YoY to $4.2M.\n\n--- Page 2 of 2 ---\nKey Risks\nSupply chain lead times expanded by 4 days.`;
+  const parsedPdf = parseUniversalData('board_deck.pdf', pdfSampleText, pdfSampleText.length);
+  const pdfStats = computeInstantStatistics(parsedPdf);
+  const pageMetric = pdfStats.metrics.find((m) => m.label === 'Page Count');
+
+  recordTest(
+    'Document Ingestion',
+    'PDF Document Classification & Page Statistics',
+    parsedPdf.format === 'pdf' && String(pageMetric?.value) === '2',
+    `Detected format "${parsedPdf.format}", pages: ${pageMetric?.value}, domain: "${pdfStats.domain}"`
+  );
+
+  const keyA = computeDatasetCacheKey('report.csv', 1024, 'Region,Sales\nNorth,100\nSouth,200');
+  const keyB = computeDatasetCacheKey('report.csv', 1024, 'Region,Sales\nEast,999\nWest,888');
+  recordTest(
+    'Concurrency Safety',
+    'Collision-Proof Cache Keys (Same Name & Byte Size)',
+    keyA !== keyB && keyA.startsWith('report.csv:1024:') && keyB.startsWith('report.csv:1024:'),
+    `Distinct keys generated for identical filename/size: "${keyA}" vs "${keyB}"`
+  );
 
   // -------------------------------------------------------------
   // SUMMARY

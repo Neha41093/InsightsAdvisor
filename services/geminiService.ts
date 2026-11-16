@@ -1,5 +1,6 @@
 import type { UniversalDataFile, FileAnalysisSummary, LearnedPattern } from '../types';
 import { runDeterministicFullDatasetAnalysis } from '../utils/dataEngine';
+import { computeDatasetCacheKey } from '../utils/dataParser';
 
 export interface StreamEvent {
   text?: string;
@@ -10,7 +11,11 @@ export interface StreamEvent {
 const serverCachedDatasetKeys = new Set<string>();
 
 function getDatasetCacheKey(dataFile: UniversalDataFile): string {
-  return `${dataFile.name}:${dataFile.size || dataFile.rawText.length}`;
+  return computeDatasetCacheKey(
+    dataFile.name,
+    dataFile.size || dataFile.rawText.length,
+    dataFile.rawText
+  );
 }
 
 /**

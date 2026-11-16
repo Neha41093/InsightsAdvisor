@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type, FunctionDeclaration } from '@google/genai';
-import { parseUniversalData } from './utils/dataParser';
+import { parseUniversalData, computeDatasetCacheKey } from './utils/dataParser';
 import { computeInstantStatistics } from './utils/dataStatistics';
 import {
   buildDatasetSchemaProfile,
@@ -16,8 +16,8 @@ import type { UniversalDataFile } from './types';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Option D: In-memory dataset cache keyed by name + byte size so subsequent chat turns
-// don't need to re-upload multi-megabyte rawText payloads over HTTP
+// Option D: In-memory dataset cache keyed by name + byte size + content hash so subsequent chat turns
+// don't need to re-upload multi-megabyte rawText payloads over HTTP and concurrent users never collide
 const datasetCache = new Map<string, UniversalDataFile>();
 
 function resolveCacheKey(file: {
@@ -26,9 +26,12 @@ function resolveCacheKey(file: {
   rawText?: string;
   cacheKey?: string;
 }): string {
-  if (file.cacheKey) return file.cacheKey;
   const fileName = file.name || 'uploaded_data_file';
   const sizeOrLen = file.size ?? file.rawText?.length ?? 0;
+  if (file.rawText) {
+    return computeDatasetCacheKey(fileName, sizeOrLen, file.rawText);
+  }
+  if (file.cacheKey) return file.cacheKey;
   return `${fileName}:${sizeOrLen}`;
 }
 

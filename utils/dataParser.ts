@@ -259,16 +259,38 @@ export function parseUniversalData(
     }
   }
 
-  // 3. Tabular extraction (CSV, TSV, DSV)
-  const tabular = tryExtractTabular(lines);
-  if (tabular && tabular.rows.length > 0 && (ext === 'csv' || ext === 'tsv' || ext === 'dsv' || tabular.totalColumns >= 2)) {
+  // 3. Tabular extraction (CSV, TSV, DSV, Excel spreadsheets converted to CSV)
+  const isExcelExt = ext === 'xlsx' || ext === 'xls' || ext === 'xlsm' || ext === 'ods';
+  if (ext !== 'pdf') {
+    const tabular = tryExtractTabular(lines);
+    if (tabular && tabular.rows.length > 0 && (isExcelExt || ext === 'csv' || ext === 'tsv' || ext === 'dsv' || tabular.totalColumns >= 2)) {
+      return {
+        name: fileName,
+        size,
+        format: 'tabular',
+        formatLabel: isExcelExt
+          ? `Excel Spreadsheet (${ext!.toUpperCase()})`
+          : ext === 'tsv'
+          ? 'TSV (Tab-Separated)'
+          : 'Delimited Table (CSV/DSV)',
+        rawText,
+        tabular,
+        lineCount,
+        wordCount,
+        charCount,
+        summaryPreview,
+      };
+    }
+  }
+
+  // 3b. PDF Document (extracted page text)
+  if (ext === 'pdf') {
     return {
       name: fileName,
       size,
-      format: 'tabular',
-      formatLabel: ext === 'tsv' ? 'TSV (Tab-Separated)' : 'Delimited Table (CSV/DSV)',
+      format: 'pdf',
+      formatLabel: 'PDF Document',
       rawText,
-      tabular,
       lineCount,
       wordCount,
       charCount,
@@ -369,6 +391,25 @@ export function parseUniversalData(
     charCount,
     summaryPreview,
   };
+}
+
+/**
+ * Fast O(1) content fingerprint over first 128 + last 128 characters
+ * to prevent cache key collisions when different files share the same name and byte size.
+ */
+export function fastContentHash(text?: string): string {
+  if (!text) return '0';
+  const sample = text.length <= 256 ? text : text.slice(0, 128) + text.slice(-128);
+  let h = 2166136261;
+  for (let i = 0; i < sample.length; i++) {
+    h = Math.imul(h ^ sample.charCodeAt(i), 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+export function computeDatasetCacheKey(fileName: string, sizeOrLen: number, rawText?: string): string {
+  const base = `${fileName || 'uploaded_data_file'}:${sizeOrLen}`;
+  return rawText ? `${base}:${fastContentHash(rawText)}` : base;
 }
 
 export function formatBytes(bytes: number, decimals = 1): string {

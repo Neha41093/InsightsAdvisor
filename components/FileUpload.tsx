@@ -1,6 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import type { UniversalDataFile } from '../types';
 import { parseUniversalData } from '../utils/dataParser';
+import { extractSpreadsheetText } from '../utils/excelExtractor';
+import { extractPdfText } from '../utils/pdfExtractor';
 import { SAMPLE_DATASETS, SampleDataset } from '../utils/sampleDatasets';
 import {
   Upload,
@@ -36,7 +38,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataParsed, onError }) => {
   const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB hard cap
 
   const processFile = useCallback(
-    (file: File) => {
+    async (file: File) => {
       // Option A: Pre-flight file size guardrail before FileReader loads into RAM
       if (file.size > MAX_FILE_SIZE_BYTES) {
         const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
@@ -46,7 +48,36 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataParsed, onError }) => {
         return;
       }
 
+      const ext = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : '';
+      const isExcel = ext === 'xlsx' || ext === 'xls' || ext === 'xlsm' || ext === 'ods';
+      const isPdf = ext === 'pdf' || file.type === 'application/pdf';
+
       setIsReading(true);
+
+      if (isExcel || isPdf) {
+        try {
+          const buffer = await file.arrayBuffer();
+          if (isExcel) {
+            const { csvText, activeSheet, totalSheets } = extractSpreadsheetText(buffer);
+            const parsed = parseUniversalData(file.name, csvText, file.size);
+            if (totalSheets > 1) {
+              parsed.formatLabel = `Excel (${ext?.toUpperCase()} · Sheet: ${activeSheet})`;
+            }
+            onDataParsed(parsed);
+          } else {
+            const { text, pageCount } = await extractPdfText(buffer);
+            const parsed = parseUniversalData(file.name, text, file.size);
+            parsed.formatLabel = `PDF Document (${pageCount} ${pageCount === 1 ? 'page' : 'pages'})`;
+            onDataParsed(parsed);
+          }
+        } catch (err: any) {
+          onError(`Failed to parse ${isPdf ? 'PDF' : 'Excel'} file: ${err?.message || 'Unknown error'}`);
+        } finally {
+          setIsReading(false);
+        }
+        return;
+      }
+
       const reader = new FileReader();
 
       reader.onload = (e) => {
@@ -140,6 +171,10 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataParsed, onError }) => {
         <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 font-mono">
           <span>CSV</span>
           <span>·</span>
+          <span>XLSX</span>
+          <span>·</span>
+          <span>PDF</span>
+          <span>·</span>
           <span>JSON</span>
           <span>·</span>
           <span>LOGS</span>
@@ -169,18 +204,24 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataParsed, onError }) => {
 
           <label htmlFor="file-upload" className="w-full h-full flex flex-col items-center cursor-pointer">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-b from-slate-50 to-slate-100 border border-slate-200/80 text-blue-600 flex items-center justify-center mb-4 shadow-xs group-hover:scale-105 group-hover:border-blue-300 transition-all">
-              <Upload className="w-6 h-6 stroke-[1.75]" />
+              <Upload className={`w-6 h-6 stroke-[1.75] ${isReading ? 'animate-pulse' : ''}`} />
             </div>
 
             <p className="text-base sm:text-lg font-semibold text-slate-900 tracking-tight">
-              <span className="text-blue-600 underline decoration-blue-200 underline-offset-4 hover:decoration-blue-500">
-                Choose a file
-              </span>{' '}
-              or drag & drop here
+              {isReading ? (
+                <span className="text-blue-600">Extracting &amp; indexing file...</span>
+              ) : (
+                <>
+                  <span className="text-blue-600 underline decoration-blue-200 underline-offset-4 hover:decoration-blue-500">
+                    Choose a file
+                  </span>{' '}
+                  or drag &amp; drop here
+                </>
+              )}
             </p>
 
             <p className="mt-1.5 text-xs text-slate-500 max-w-sm">
-              Accepts tabular, nested, log, or freeform text files
+              Accepts CSV, Excel (.xlsx/.xls), PDF, JSON, logs, or freeform text
             </p>
             <p className="mt-1 text-[11px] font-mono text-slate-400">
               (File size limit: 50MB / ~50,000 rows)
