@@ -65,8 +65,13 @@ function tryExtractTabular(lines: string[]): TabularData | undefined {
   const parsedRows = nonEmptyLines.map((line) => parseDelimitedLine(line, delimiter));
   if (parsedRows.length === 0 || parsedRows[0].length <= 1) return undefined;
 
-  // Normalize column count so ragged rows don't break rendering
-  const maxCols = Math.max(...parsedRows.map((r) => r.length));
+  // Normalize column count iteratively so large files (50k-200k+ rows) don't overflow the call stack
+  let maxCols = 0;
+  for (let i = 0; i < parsedRows.length; i++) {
+    if (parsedRows[i].length > maxCols) {
+      maxCols = parsedRows[i].length;
+    }
+  }
   if (maxCols <= 1) return undefined;
 
   let headers: string[] = [];
