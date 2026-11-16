@@ -2,6 +2,7 @@ import { parseUniversalData } from '../utils/dataParser';
 import { computeInstantStatistics } from '../utils/dataStatistics';
 import { cleanEmptySections } from '../utils/markdownCleaner';
 import { SAMPLE_DATASETS } from '../utils/sampleDatasets';
+import { buildDatasetSchemaProfile, executeSqlQuery } from '../utils/dataEngine';
 
 export interface TestResult {
   category: string;
@@ -329,6 +330,27 @@ Europe generated the largest share of revenue at $189,000.`;
     true,
     'Top header banner configured with dark gradient (slate-950 to indigo-950), high contrast white typography, and no extraneous tags'
   );
+
+  // -------------------------------------------------------------
+  // TEST GROUP 7: Option 1 Full-Dataset In-Memory SQL Engine
+  // -------------------------------------------------------------
+  console.log('\n--- TEST GROUP 7: Option 1 Full-Dataset SQL Engine ---');
+  if (csvSample) {
+    const parsedCsv = parseUniversalData(csvSample.fileName, csvSample.content);
+    const schemaProfile = buildDatasetSchemaProfile(parsedCsv);
+    const sqlRes = executeSqlQuery(
+      parsedCsv,
+      "SELECT Region, COUNT(*) AS Orders, SUM(Revenue) AS TotalRev FROM dataset WHERE UnitsSold > 40 GROUP BY Region ORDER BY TotalRev DESC"
+    );
+
+    recordTest(
+      'SQL Engine',
+      'Full-Dataset Schema Profile & SQL Execution',
+      schemaProfile.totalRows === 10 && sqlRes.rows.length > 0 && sqlRes.scannedRows === 10,
+      `Scanned ${sqlRes.scannedRows} rows in ${sqlRes.executionTimeMs}ms, returned ${sqlRes.rows.length} grouped rows`,
+      { rowsReturned: sqlRes.rows.length, scannedRows: sqlRes.scannedRows }
+    );
+  }
 
   // -------------------------------------------------------------
   // SUMMARY

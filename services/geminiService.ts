@@ -1,15 +1,25 @@
 import type { UniversalDataFile, FileAnalysisSummary, LearnedPattern } from '../types';
+import { runDeterministicFullDatasetAnalysis } from '../utils/dataEngine';
 
 export interface StreamEvent {
   text?: string;
   error?: string;
 }
 
+// Option D: Track datasets already cached in server RAM so chat turns don't re-upload rawText
+const serverCachedDatasetKeys = new Set<string>();
+
+function getDatasetCacheKey(dataFile: UniversalDataFile): string {
+  return `${dataFile.name}:${dataFile.size || dataFile.rawText.length}`;
+}
+
 /**
  * Automatically generates an executive summary, calculated key statistics,
  * and high-impact question options when a file is loaded.
+ * Also registers the dataset in the server's in-memory session cache (Option D).
  */
 export async function fetchFileSummary(dataFile: UniversalDataFile): Promise<FileAnalysisSummary> {
+  const cacheKey = getDatasetCacheKey(dataFile);
   const response = await fetch('/api/summarize', {
     method: 'POST',
     headers: {
@@ -18,8 +28,10 @@ export async function fetchFileSummary(dataFile: UniversalDataFile): Promise<Fil
     body: JSON.stringify({
       file: {
         name: dataFile.name,
+        size: dataFile.size,
         format: dataFile.format,
         formatLabel: dataFile.formatLabel,
+        cacheKey,
         rawText: dataFile.rawText,
       },
     }),
@@ -36,12 +48,14 @@ export async function fetchFileSummary(dataFile: UniversalDataFile): Promise<Fil
     throw new Error(errorMsg);
   }
 
+  serverCachedDatasetKeys.add(cacheKey);
   return response.json();
 }
 
 /**
- * Streams response from full-stack server endpoint /api/chat.
- * Incorporates learned feedback patterns and instructions for optimal tool execution.
+ * Streams response from full-stack server endpoint /api/chat (Option 1 Full-Dataset SQL Engine).
+ * Uses Option D session cache key to avoid re-sending rawText on every chat turn, with
+ * transparent retry if the server cache was evicted.
  */
 export async function* getChatbotResponseStream(
   question: string,
@@ -50,33 +64,50 @@ export async function* getChatbotResponseStream(
   depthPreference?: 'auto' | 'summary' | 'detailed'
 ): AsyncGenerator<StreamEvent> {
   try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        question,
-        file: {
-          name: dataFile.name,
-          format: dataFile.format,
-          formatLabel: dataFile.formatLabel,
-          rawText: dataFile.rawText,
+    const cacheKey = getDatasetCacheKey(dataFile);
+    const isCachedOnServer = serverCachedDatasetKeys.has(cacheKey);
+
+    const sendChatRequest = async (includeRawText: boolean) =>
+      fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        learnedPatterns: learnedPatterns || [],
-        depthPreference: depthPreference || 'auto',
-      }),
-    });
+        body: JSON.stringify({
+          question,
+          file: {
+            name: dataFile.name,
+            size: dataFile.size,
+            format: dataFile.format,
+            formatLabel: dataFile.formatLabel,
+            cacheKey,
+            ...(includeRawText ? { rawText: dataFile.rawText } : {}),
+          },
+          learnedPatterns: learnedPatterns || [],
+          depthPreference: depthPreference || 'auto',
+        }),
+      });
+
+    let response = await sendChatRequest(!isCachedOnServer);
+
+    // Transparent Option D retry if server cache was cleared/restarted
+    if (response.status === 409 && isCachedOnServer) {
+      response = await sendChatRequest(true);
+      if (response.ok) {
+        serverCachedDatasetKeys.add(cacheKey);
+      }
+    } else if (response.ok) {
+      serverCachedDatasetKeys.add(cacheKey);
+    }
 
     if (!response.ok) {
-      let errorDetail = `Server error (${response.status})`;
-      try {
-        const errJson = await response.json();
-        if (errJson.error) errorDetail = errJson.error;
-      } catch {
-        // use default error detail
-      }
-      yield { error: errorDetail };
+      // Fallback to client-side full-dataset SQL engine if server returns error
+      const fallbackText = runDeterministicFullDatasetAnalysis(
+        question,
+        dataFile,
+        depthPreference || 'auto'
+      );
+      yield { text: fallbackText };
       return;
     }
 
@@ -121,7 +152,12 @@ export async function* getChatbotResponseStream(
       }
     }
   } catch (err: any) {
-    console.error('Network or streaming error:', err);
-    yield { error: err?.message || 'Connection to analysis server failed.' };
+    console.warn('Backend unreachable, executing local full-dataset SQL engine:', err);
+    const fallbackText = runDeterministicFullDatasetAnalysis(
+      question,
+      dataFile,
+      depthPreference || 'auto'
+    );
+    yield { text: fallbackText };
   }
 }

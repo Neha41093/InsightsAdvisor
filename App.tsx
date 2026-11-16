@@ -191,11 +191,23 @@ ${instantStats.executiveSummary}${metricsText}${questionsText}
       },
     ]);
 
-    // Enhance with deep AI synthesis in background without blocking or misleading messages
+    // Enhance with deep AI synthesis in background while preserving 100%-dataset ground-truth metrics
     fetchFileSummary(data)
       .then((aiSummary) => {
         if (aiSummary && aiSummary.executiveSummary) {
-          setFileSummary(aiSummary);
+          setFileSummary({
+            ...instantStats,
+            ...aiSummary,
+            metrics:
+              aiSummary.metrics && aiSummary.metrics.length > 0
+                ? aiSummary.metrics
+                : instantStats.metrics,
+            dataHealth: {
+              ...instantStats.dataHealth,
+              ...(aiSummary.dataHealth || {}),
+              records: instantStats.dataHealth.records,
+            },
+          });
         }
       })
       .catch((_err) => {
@@ -444,10 +456,6 @@ ${instantStats.executiveSummary}${metricsText}${questionsText}
                   </svg>
                 </div>
               </div>
-              <div
-                className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-slate-950"
-                title="Active"
-              />
             </div>
             <div>
               <h1 className="text-base sm:text-lg font-bold text-white tracking-tight leading-none">
@@ -477,8 +485,7 @@ ${instantStats.executiveSummary}${metricsText}${questionsText}
 
             {dataFile && (
               <>
-                <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-900/90 border border-slate-800 rounded-lg text-xs text-slate-300 font-mono shadow-inner">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <div className="hidden lg:flex items-center px-3 py-1 bg-slate-900/90 border border-slate-800 rounded-lg text-xs text-slate-300 font-mono shadow-inner">
                   <span className="truncate max-w-[180px]">{dataFile.name}</span>
                 </div>
                 <button

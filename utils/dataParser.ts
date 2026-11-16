@@ -105,13 +105,43 @@ function tryExtractTabular(lines: string[]): TabularData | undefined {
 }
 
 /**
+ * PII Scrubber & Prompt-Injection Boundary Sanitizer:
+ * 1. Masks sensitive PII (emails, SSNs, credit card numbers, phone numbers, API keys)
+ *    before data is stored in memory or dispatched to Gemini.
+ * 2. Neutralizes embedded XML boundary escapes or UI delimiter spoofing inside untrusted files.
+ */
+export function scrubPIIAndSanitize(raw: string): string {
+  if (!raw) return '';
+
+  return (
+    raw
+      // 1. Mask Email Addresses
+      .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, '[REDACTED_EMAIL]')
+      // 2. Mask US Social Security Numbers (SSN: XXX-XX-XXXX, avoids YYYY-MM-DD dates)
+      .replace(/\b(?!000|666|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/g, '[REDACTED_SSN]')
+      // 3. Mask 16-digit Credit/Debit Card numbers (XXXX-XXXX-XXXX-XXXX or XXXX XXXX XXXX XXXX)
+      .replace(/\b(?:\d{4}[ -]){3}\d{4}\b/g, '[REDACTED_CARD]')
+      // 4. Mask formatted Phone Numbers (e.g. (555) 234-5678, +1-555-234-5678, 555-234-5678)
+      .replace(/(?:\+\d{1,2}\s*)?\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g, '[REDACTED_PHONE]')
+      // 5. Mask common API keys / secret tokens
+      .replace(/\b(?:sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z\-_]{35}|ghp_[A-Za-z0-9]{36})\b/g, '[REDACTED_SECRET]')
+      // 6. Escape any attempt inside untrusted data to break out of XML prompt-injection boundaries
+      .replace(/<\/?untrusted_dataset_context>/gi, '[ESCAPED_BOUNDARY_TAG]')
+      .replace(/<\/?user_query>/gi, '[ESCAPED_QUERY_TAG]')
+      // 7. Prevent untrusted data from spoofing internal UI extraction blocks
+      .replace(/<<<(END_)?(CHART_DATA|TOOL_EXECUTION)>>>/gi, '[ESCAPED_UI_TAG]')
+  );
+}
+
+/**
  * Universal data file parser that accepts any structured or unstructured content
  */
 export function parseUniversalData(
   fileName: string,
-  rawText: string,
+  rawInputText: string,
   fileSize?: number
 ): UniversalDataFile {
+  const rawText = scrubPIIAndSanitize(rawInputText);
   const trimmed = rawText.trim();
   const size = fileSize || new Blob([rawText]).size;
   const lines = rawText.split(/\r\n|\n/);

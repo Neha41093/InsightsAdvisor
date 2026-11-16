@@ -33,8 +33,19 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataParsed, onError }) => {
     }
   }, []);
 
+  const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB hard cap
+
   const processFile = useCallback(
     (file: File) => {
+      // Option A: Pre-flight file size guardrail before FileReader loads into RAM
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        onError(
+          `File size (${sizeMb} MB) exceeds the 50MB (~50,000 rows) in-memory limit. Please upload a smaller or filtered dataset.`
+        );
+        return;
+      }
+
       setIsReading(true);
       const reader = new FileReader();
 
@@ -61,7 +72,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataParsed, onError }) => {
 
       reader.readAsText(file);
     },
-    [onDataParsed, onError]
+    [onDataParsed, onError, MAX_FILE_SIZE_BYTES]
   );
 
   const handleDrop = useCallback(
@@ -170,6 +181,9 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataParsed, onError }) => {
 
             <p className="mt-1.5 text-xs text-slate-500 max-w-sm">
               Accepts tabular, nested, log, or freeform text files
+            </p>
+            <p className="mt-1 text-[11px] font-mono text-slate-400">
+              (File size limit: 50MB / ~50,000 rows)
             </p>
 
             <input

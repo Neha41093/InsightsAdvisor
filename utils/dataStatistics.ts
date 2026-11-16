@@ -146,7 +146,7 @@ export function computeInstantStatistics(dataFile: UniversalDataFile): FileAnaly
 
     return {
       domain: 'Tabular Dataset',
-      executiveSummary: `This dataset contains ${totalRows} entries across ${totalColumns} fields, structured around key attributes like ${headers.slice(0, 4).join(', ')}${headers.length > 4 ? ', and more' : ''}. Primary calculated metrics include ${numericCols.map((c) => c.header).slice(0, 3).join(', ') || 'records'}.`,
+      executiveSummary: `This dataset contains ${totalRows.toLocaleString()} entries across ${totalColumns} fields (${headers.slice(0, 4).join(', ')}${headers.length > 4 ? ', and more' : ''}). Data Assumption: Based on the detected schema and cell values, this analysis treats ${numericCols.map((c) => c.header).slice(0, 3).join(', ') || headers[0]} as quantitative measures segmented by ${catCol} — please verify if a different column interpretation applies.`,
       metrics: metrics.slice(0, 5),
       dataHealth: {
         records: `${totalRows} records × ${totalColumns} columns`,
