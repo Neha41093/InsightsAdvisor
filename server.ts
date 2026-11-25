@@ -2,8 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI, Type, FunctionDeclaration } from '@google/genai';
+import { GoogleGenAI, Type, FunctionDeclaration, ThinkingLevel } from '@google/genai';
 import { parseUniversalData, computeDatasetCacheKey } from './utils/dataParser';
+
+// Hybrid Gemini 4 model routing:
+// - FAST_MODEL (gemini-4-hydrogen): low-latency dataset summarization & SQL/search query planning
+// - ANALYSIS_MODEL (gemini-4-neon): deep statistical reasoning & narrative synthesis
+const FAST_MODEL = 'gemini-4-hydrogen';
+const ANALYSIS_MODEL = 'gemini-4-neon';
 import { computeInstantStatistics } from './utils/dataStatistics';
 import {
   buildDatasetSchemaProfile,
@@ -128,6 +134,10 @@ async function startServer() {
       status: 'ok',
       hasApiKey: Boolean(apiKey),
       engine: 'full-dataset-sql-v2',
+      models: {
+        fast: FAST_MODEL,
+        analysis: ANALYSIS_MODEL,
+      },
       timestamp: new Date().toISOString(),
     });
   });
@@ -242,10 +252,13 @@ Respond ONLY with a valid JSON object matching this schema:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
+        model: FAST_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
+          thinkingConfig: {
+            thinkingLevel: ThinkingLevel.LOW,
+          },
         },
       });
 
@@ -369,7 +382,7 @@ CRITICAL SCHEMA-FIRST QUERY PLANNING RULES:
 
       try {
         const planResponse = await ai.models.generateContent({
-          model: 'gemini-3.1-flash-lite',
+          model: FAST_MODEL,
           contents: plannerPrompt,
           config: {
             tools: [
@@ -380,7 +393,9 @@ CRITICAL SCHEMA-FIRST QUERY PLANNING RULES:
                 ],
               },
             ],
-            temperature: 0.1,
+            thinkingConfig: {
+              thinkingLevel: ThinkingLevel.LOW,
+            },
           },
         });
 
@@ -584,12 +599,17 @@ ${!parsedData.tabular ? `Unstructured Content Sample:\n\`\`\`\n${parsedData.rawT
 ${question}${depthDirective}
 </user_query>`;
 
+      const synthesisThinkingLevel =
+        depthPreference === 'summary' ? ThinkingLevel.MEDIUM : ThinkingLevel.HIGH;
+
       const responseStream = await ai.models.generateContentStream({
-        model: 'gemini-3.1-flash-lite',
+        model: ANALYSIS_MODEL,
         contents: synthesisPrompt,
         config: {
           systemInstruction,
-          temperature: 0.2,
+          thinkingConfig: {
+            thinkingLevel: synthesisThinkingLevel,
+          },
         },
       });
 
